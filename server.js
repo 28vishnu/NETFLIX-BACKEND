@@ -23,17 +23,13 @@ const TMDB_IMAGE_BASE_URL = 'https://image.themoviedb.org/t/p/'; // Use w500 for
 
 // Add a check to ensure the TMDB_API_KEY is loaded
 if (!TMDB_API_KEY) {
-    console.error('Error: TMDB_API_KEY is not set in your environment variables.');
-    // In a production environment, you might want to exit or handle this more gracefully.
-    // For local development, ensure it's in your .env file.
+    console.error('SERVER STARTUP ERROR: TMDB_API_KEY is not set in your environment variables. Please configure it in Render.');
+    // Do NOT exit process here, let the app start but API calls dependent on it will fail.
 }
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'YOUR_MONGODB_CONNECTION_STRING'; // Your MongoDB URI
 mongoose.connect(MONGO_URI, {
-    // useNewUrlParser and useUnifiedTopology are deprecated and no longer needed in Mongoose 6.0+
-    // useNewUrlParser: true, 
-    // useUnifiedTopology: true,
     dbName: 'NETFLIX' // Specify your database name here
 })
 .then(() => console.log('MongoDB connected successfully'))
@@ -55,12 +51,10 @@ app.get('/', (req, res) => {
 // Get trending movies (using TMDB API for dynamic content)
 app.get('/api/movies/trending', async (req, res) => {
     try {
-        // --- Added explicit check for TMDB_API_KEY ---
         if (!TMDB_API_KEY) {
-            console.error('TMDB_API_KEY is not set. Cannot fetch trending movies.');
+            console.error('TMDB_API_KEY is not set in environment. Cannot fetch trending movies.');
             return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
         }
-        // --- End of added check ---
 
         const response = await axios.get(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`);
         
@@ -77,15 +71,26 @@ app.get('/api/movies/trending', async (req, res) => {
         }));
         res.json(trendingMovies);
     } catch (error) {
-        // Log the actual error from Axios to get more details (e.g., 401 Unauthorized)
+        // --- ENHANCED LOGGING FOR TMDB API CALLS ---
         console.error('Error fetching trending movies from TMDB:', error.message);
         if (error.response) {
-            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            // Error response from TMDB API (e.g., 401, 403, 404, 500)
+            console.error('TMDB API Response Error: Status', error.response.status, 'Data:', error.response.data);
             if (error.response.status === 401 || error.response.status === 403) {
-                return res.status(401).json({ message: 'Failed to fetch trending movies: TMDB API Key is invalid or expired.' });
+                return res.status(401).json({ message: 'Failed to fetch trending movies: TMDB API Key is invalid or expired. Check Render environment variables.' });
+            } else {
+                return res.status(error.response.status).json({ message: `TMDB API error: ${error.response.status} - ${error.response.data.status_message || 'Unknown TMDB error'}` });
             }
+        } else if (error.request) {
+            // The request was made but no response was received (e.g., network error, CORS)
+            console.error('TMDB API Request Error: No response received. Check network connectivity or TMDB service status.', error.code);
+            return res.status(500).json({ message: `Network error when connecting to TMDB: ${error.code || 'Unknown'}.` });
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.error('TMDB API Axios Setup Error:', error.message);
+            return res.status(500).json({ message: `Configuration error for TMDB API call: ${error.message}.` });
         }
-        res.status(500).json({ message: 'Failed to fetch trending movies from external API.' });
+        // --- END ENHANCED LOGGING ---
     }
 });
 
@@ -373,25 +378,29 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/series/:tmdbId/seasons', async (req, res) => {
     const { tmdbId } = req.params;
     try {
-        // --- Added explicit check for TMDB_API_KEY ---
         if (!TMDB_API_KEY) {
-            console.error('TMDB_API_KEY is not set. Cannot fetch series seasons.');
+            console.error('TMDB_API_KEY is not set in environment. Cannot fetch series seasons.');
             return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
         }
-        // --- End of added check ---
 
         const response = await axios.get(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${TMDB_API_KEY}`);
-        // Return only the seasons array from the TV show details
         res.json(response.data.seasons);
     } catch (error) {
         console.error(`Error fetching seasons for TMDB series ${tmdbId}:`, error.message);
         if (error.response) {
-            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            console.error('TMDB API Response Error: Status', error.response.status, 'Data:', error.response.data);
             if (error.response.status === 401 || error.response.status === 403) {
-                return res.status(401).json({ message: 'Failed to fetch seasons: TMDB API Key is invalid or expired.' });
+                return res.status(401).json({ message: 'Failed to fetch seasons: TMDB API Key is invalid or expired. Check Render environment variables.' });
+            } else {
+                return res.status(error.response.status).json({ message: `TMDB API error: ${error.response.status} - ${error.response.data.status_message || 'Unknown TMDB error'}` });
             }
+        } else if (error.request) {
+            console.error('TMDB API Request Error: No response received. Check network connectivity or TMDB service status.', error.code);
+            return res.status(500).json({ message: `Network error when connecting to TMDB: ${error.code || 'Unknown'}.` });
+        } else {
+            console.error('TMDB API Axios Setup Error:', error.message);
+            return res.status(500).json({ message: `Configuration error for TMDB API call: ${error.message}.` });
         }
-        res.status(500).json({ message: 'Failed to fetch seasons.' });
     }
 });
 
@@ -399,25 +408,29 @@ app.get('/api/series/:tmdbId/seasons', async (req, res) => {
 app.get('/api/series/:tmdbId/season/:seasonNumber/episodes', async (req, res) => {
     const { tmdbId, seasonNumber } = req.params;
     try {
-        // --- Added explicit check for TMDB_API_KEY ---
         if (!TMDB_API_KEY) {
-            console.error('TMDB_API_KEY is not set. Cannot fetch series episodes.');
+            console.error('TMDB_API_KEY is not set in environment. Cannot fetch series episodes.');
             return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
         }
-        // --- End of added check ---
 
         const response = await axios.get(`${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}`);
-        // Return only the episodes array from the season details
         res.json(response.data.episodes);
     } catch (error) {
         console.error(`Error fetching episodes for TMDB series ${tmdbId}, season ${seasonNumber}:`, error.message);
         if (error.response) {
-            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            console.error('TMDB API Response Error: Status', error.response.status, 'Data:', error.response.data);
             if (error.response.status === 401 || error.response.status === 403) {
-                return res.status(401).json({ message: 'Failed to fetch episodes: TMDB API Key is invalid or expired.' });
+                return res.status(401).json({ message: 'Failed to fetch episodes: TMDB API Key is invalid or expired. Check Render environment variables.' });
+            } else {
+                return res.status(error.response.status).json({ message: `TMDB API error: ${error.response.status} - ${error.response.data.status_message || 'Unknown TMDB error'}` });
             }
+        } else if (error.request) {
+            console.error('TMDB API Request Error: No response received. Check network connectivity or TMDB service status.', error.code);
+            return res.status(500).json({ message: `Network error when connecting to TMDB: ${error.code || 'Unknown'}.` });
+        } else {
+            console.error('TMDB API Axios Setup Error:', error.message);
+            return res.status(500).json({ message: `Configuration error for TMDB API call: ${error.message}.` });
         }
-        res.status(500).json({ message: 'Failed to fetch episodes.' });
     }
 });
 
