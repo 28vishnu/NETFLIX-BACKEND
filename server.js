@@ -55,6 +55,13 @@ app.get('/', (req, res) => {
 // Get trending movies (using TMDB API for dynamic content)
 app.get('/api/movies/trending', async (req, res) => {
     try {
+        // --- Added explicit check for TMDB_API_KEY ---
+        if (!TMDB_API_KEY) {
+            console.error('TMDB_API_KEY is not set. Cannot fetch trending movies.');
+            return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
+        }
+        // --- End of added check ---
+
         const response = await axios.get(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`);
         
         const trendingMovies = response.data.results.map(item => ({
@@ -70,7 +77,14 @@ app.get('/api/movies/trending', async (req, res) => {
         }));
         res.json(trendingMovies);
     } catch (error) {
+        // Log the actual error from Axios to get more details (e.g., 401 Unauthorized)
         console.error('Error fetching trending movies from TMDB:', error.message);
+        if (error.response) {
+            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            if (error.response.status === 401 || error.response.status === 403) {
+                return res.status(401).json({ message: 'Failed to fetch trending movies: TMDB API Key is invalid or expired.' });
+            }
+        }
         res.status(500).json({ message: 'Failed to fetch trending movies from external API.' });
     }
 });
@@ -359,11 +373,24 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/series/:tmdbId/seasons', async (req, res) => {
     const { tmdbId } = req.params;
     try {
+        // --- Added explicit check for TMDB_API_KEY ---
+        if (!TMDB_API_KEY) {
+            console.error('TMDB_API_KEY is not set. Cannot fetch series seasons.');
+            return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
+        }
+        // --- End of added check ---
+
         const response = await axios.get(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${TMDB_API_KEY}`);
         // Return only the seasons array from the TV show details
         res.json(response.data.seasons);
     } catch (error) {
         console.error(`Error fetching seasons for TMDB series ${tmdbId}:`, error.message);
+        if (error.response) {
+            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            if (error.response.status === 401 || error.response.status === 403) {
+                return res.status(401).json({ message: 'Failed to fetch seasons: TMDB API Key is invalid or expired.' });
+            }
+        }
         res.status(500).json({ message: 'Failed to fetch seasons.' });
     }
 });
@@ -372,11 +399,24 @@ app.get('/api/series/:tmdbId/seasons', async (req, res) => {
 app.get('/api/series/:tmdbId/season/:seasonNumber/episodes', async (req, res) => {
     const { tmdbId, seasonNumber } = req.params;
     try {
+        // --- Added explicit check for TMDB_API_KEY ---
+        if (!TMDB_API_KEY) {
+            console.error('TMDB_API_KEY is not set. Cannot fetch series episodes.');
+            return res.status(400).json({ message: 'TMDB API Key is not configured on the server.' });
+        }
+        // --- End of added check ---
+
         const response = await axios.get(`${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}`);
         // Return only the episodes array from the season details
         res.json(response.data.episodes);
     } catch (error) {
         console.error(`Error fetching episodes for TMDB series ${tmdbId}, season ${seasonNumber}:`, error.message);
+        if (error.response) {
+            console.error('TMDB API Response Error:', error.response.status, error.response.data);
+            if (error.response.status === 401 || error.response.status === 403) {
+                return res.status(401).json({ message: 'Failed to fetch episodes: TMDB API Key is invalid or expired.' });
+            }
+        }
         res.status(500).json({ message: 'Failed to fetch episodes.' });
     }
 });
