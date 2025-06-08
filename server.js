@@ -31,8 +31,9 @@ if (!TMDB_API_KEY) {
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'YOUR_MONGODB_CONNECTION_STRING'; // Your MongoDB URI
 mongoose.connect(MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    // useNewUrlParser and useUnifiedTopology are deprecated and no longer needed in Mongoose 6.0+
+    // useNewUrlParser: true, 
+    // useUnifiedTopology: true,
     dbName: 'NETFLIX' // Specify your database name here
 })
 .then(() => console.log('MongoDB connected successfully'))
