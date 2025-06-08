@@ -49,7 +49,55 @@ app.get('/', (req, res) => {
     res.send('Netflix Clone Backend is running!');
 });
 
-// --- Content Fetching Routes (Movies & Series) ---
+// --- Trending/Popular/Best Content (MUST BE DEFINED BEFORE GENERIC :id ROUTES) ---
+
+// Get trending movies (using TMDB API for dynamic content)
+app.get('/api/movies/trending', async (req, res) => {
+    try {
+        const response = await axios.get(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`);
+        
+        const trendingMovies = response.data.results.map(item => ({
+            tmdbId: item.id,
+            title: item.title,
+            plot: item.overview,
+            poster: item.poster_path,
+            backdrop: item.backdrop_path,
+            release_date: item.release_date,
+            year: item.release_date ? new Date(item.release_date).getFullYear().toString() : 'N/A',
+            imdbRating: item.vote_average ? item.vote_average.toFixed(1) : 'N/A',
+            type: 'movie',
+        }));
+        res.json(trendingMovies);
+    } catch (error) {
+        console.error('Error fetching trending movies from TMDB:', error.message);
+        res.status(500).json({ message: 'Failed to fetch trending movies from external API.' });
+    }
+});
+
+// Get popular movies from your DB
+app.get('/api/movies/popular', async (req, res) => {
+    try {
+        const movies = await Movie.find({}).sort({ imdbVotes: -1 }).limit(20);
+        res.json(movies);
+    } catch (error) {
+        console.error('Error fetching popular movies from DB:', error);
+        res.status(500).json({ message: 'Error fetching popular movies.' });
+    }
+});
+
+// Get best series from your DB (e.g., by highest rating)
+app.get('/api/series/best', async (req, res) => {
+    try {
+        const series = await Series.find({}).sort({ imdbRating: -1 }).limit(20);
+        res.json(series);
+    } catch (error) {
+        console.error('Error fetching best series from DB:', error);
+        res.status(500).json({ message: 'Error fetching best series.' });
+    }
+});
+
+
+// --- Content Fetching Routes (Movies & Series - More Generic) ---
 
 // Get all movies
 app.get('/api/movies', async (req, res) => {
@@ -73,14 +121,17 @@ app.get('/api/series', async (req, res) => {
     }
 });
 
-// Get a single movie by IMDb ID or TMDB ID
+// Get a single movie by IMDb ID or TMDB ID (this must come AFTER specific routes like /movies/popular)
 app.get('/api/movies/:id', async (req, res) => {
     try {
         const { id } = req.params;
         let movie = await Movie.findOne({ imdbID: id });
         if (!movie) {
             // If not found by IMDb ID, try by TMDB ID
-            movie = await Movie.findOne({ tmdbId: id });
+            // Only attempt number conversion if 'id' looks like a number
+            if (!isNaN(id) && !isNaN(parseFloat(id))) {
+                movie = await Movie.findOne({ tmdbId: id });
+            }
         }
         if (!movie) {
             return res.status(404).json({ message: 'Movie not found.' });
@@ -92,14 +143,17 @@ app.get('/api/movies/:id', async (req, res) => {
     }
 });
 
-// Get a single series by IMDb ID or TMDB ID
+// Get a single series by IMDb ID or TMDB ID (this must come AFTER specific routes like /series/best)
 app.get('/api/series/:id', async (req, res) => {
     try {
         const { id } = req.params;
         let series = await Series.findOne({ imdbID: id });
         if (!series) {
             // If not found by IMDb ID, try by TMDB ID
-            series = await Series.findOne({ tmdbId: id });
+            // Only attempt number conversion if 'id' looks like a number
+            if (!isNaN(id) && !isNaN(parseFloat(id))) {
+                series = await Series.findOne({ tmdbId: id });
+            }
         }
         if (!series) {
             return res.status(404).json({ message: 'Series not found.' });
@@ -108,60 +162,6 @@ app.get('/api/series/:id', async (req, res) => {
     } catch (error) {
         console.error('Error fetching series details:', error);
         res.status(500).json({ message: 'Error fetching series details.' });
-    }
-});
-
-// --- Trending/Popular/Best Content ---
-
-// Get trending movies (using TMDB API for dynamic content)
-app.get('/api/movies/trending', async (req, res) => {
-    try {
-        // Example: Fetch trending movies from TMDB (using v3 API endpoint for easier use)
-        // Ensure you have a v3 API key if you're hitting TMDB directly
-        const response = await axios.get(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`);
-        
-        // Map TMDB data to your schema structure for consistency
-        const trendingMovies = response.data.results.map(item => ({
-            tmdbId: item.id,
-            title: item.title,
-            plot: item.overview,
-            poster: item.poster_path,
-            backdrop: item.backdrop_path,
-            release_date: item.release_date,
-            year: item.release_date ? new Date(item.release_date).getFullYear().toString() : 'N/A',
-            imdbRating: item.vote_average ? item.vote_average.toFixed(1) : 'N/A',
-            type: 'movie',
-            // Note: Genre IDs will need to be mapped to names if you want to display them
-            // For now, we'll just include the IDs or leave as undefined if not needed.
-            // You might fetch full details for each movie if rich data is needed here.
-        }));
-        res.json(trendingMovies);
-    } catch (error) {
-        console.error('Error fetching trending movies from TMDB:', error.message);
-        res.status(500).json({ message: 'Failed to fetch trending movies from external API.' });
-    }
-});
-
-// Get popular movies from your DB
-app.get('/api/movies/popular', async (req, res) => {
-    try {
-        // Assuming 'popular' can be determined by a high imdbVotes count or simply by recent additions
-        const movies = await Movie.find({}).sort({ imdbVotes: -1 }).limit(20);
-        res.json(movies);
-    } catch (error) {
-        console.error('Error fetching popular movies from DB:', error);
-        res.status(500).json({ message: 'Error fetching popular movies.' });
-    }
-});
-
-// Get best series from your DB (e.g., by highest rating)
-app.get('/api/series/best', async (req, res) => {
-    try {
-        const series = await Series.find({}).sort({ imdbRating: -1 }).limit(20);
-        res.json(series);
-    } catch (error) {
-        console.error('Error fetching best series from DB:', error);
-        res.status(500).json({ message: 'Error fetching best series.' });
     }
 });
 
